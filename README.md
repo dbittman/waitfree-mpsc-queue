@@ -36,3 +36,11 @@ The second half of the enqueuing function gains near-exclusive access to the hea
 
 In the dequeue function, we exchange the tail with NULL, and observe the return value. If the return value is NULL, then there's nothing in the queue and so we return NULL. If we got back an object, we just increment the tail and decrement the count, before returning.
 
+Performance (preliminary)
+-------------------------
+Here's a quick comparison to a locked circular queue I wrote quickly, fueled by beer. With 64 threads, each writing 200 objects to the queue with the speed of 64 fairly slow threads (and, of course, a singular thread reading from it with the speed of a one fairly slow thread ... ).
+
+![I WILL WRITE 500 OBJECTS, AND I WILL WRITE 500 MORE](https://raw.githubusercontent.com/dbittman/waitfree-mpsc-queue/master/data/64-200.png)
+
+Well, that's pretty nice. If your queue is small, then MPSCQ does wonders compared to locking, which is what I would expect.
+

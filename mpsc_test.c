@@ -5,25 +5,30 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <assert.h>
-
 #include "mpscq.h"
 
 struct mpscq *queue;
 _Atomic int amount_produced = ATOMIC_VAR_INIT(0);
 _Atomic int amount_consumed = ATOMIC_VAR_INIT(0);
 _Atomic bool done = ATOMIC_VAR_INIT(false);
+_Atomic int retries = ATOMIC_VAR_INIT(0);
+_Atomic long long total = ATOMIC_VAR_INIT(0);
+#define NUM_ITEMS 100
+#define NUM_THREADS 128
 
-#define NUM_ITEMS 2000
-#define NUM_THREADS 2001
-#define CAPACITY 50000000
 void *producer_main(void *x)
 {
+	struct timespec start, end;
 	for(int i=0;i<NUM_ITEMS;i++) {
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
 		bool r = mpscq_enqueue(queue, x);
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
 		if(r) {
 			atomic_fetch_add(&amount_produced, 1);
+			total += (end.tv_nsec - start.tv_nsec) / 1000;
 		} else {
 			i--;
+			retries++;
 		}
 	}
 	pthread_exit(0);
@@ -48,6 +53,7 @@ void *consumer_main(void *x)
 	pthread_exit(0);
 }
 
+#include <time.h>
 int main(int argc, char **argv)
 {
 	(void)argc;
@@ -56,13 +62,13 @@ int main(int argc, char **argv)
 	pthread_t producers[num_producers];
 	pthread_t consumer;
 
-	queue = mpscq_create(NULL, CAPACITY);
+	struct timespec start, end;
 
-	fprintf(stderr, ":: LOCK FREE? int=%d long=%d ptr=%d llong=%d\n",
-			ATOMIC_INT_LOCK_FREE, ATOMIC_LONG_LOCK_FREE,
-			ATOMIC_POINTER_LOCK_FREE, ATOMIC_LLONG_LOCK_FREE);
+	int cap = atoi(argv[1]);
+	queue = mpscq_create(NULL, cap);
 
 	pthread_create(&consumer, NULL, consumer_main, NULL);
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
 	for(long i=0;i<num_producers;i++) {
 		pthread_create(&producers[i], NULL, producer_main, &producers[i]);
 	}
@@ -70,11 +76,15 @@ int main(int argc, char **argv)
 	for(int i=0;i<num_producers;i++) {
 		pthread_join(producers[i], NULL);
 	}
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
 	done = true;
 	pthread_join(consumer, NULL);
-	
-	fprintf(stderr, "Amount produced: %d, Amount consumed: %d\n",
-			amount_produced, amount_consumed);
+
+	long ms = (end.tv_sec - start.tv_sec) * 1000;
+	ms += (end.tv_nsec - start.tv_nsec) / 1000000;
+
+	fprintf(stdout, "\t%d\t%ld\t%ld\n",
+			retries, ms, (long)(total / amount_produced));
 	exit(amount_produced != amount_consumed);
 }
 
