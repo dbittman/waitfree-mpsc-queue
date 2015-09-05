@@ -1,9 +1,8 @@
-#include <stdio.h>
+/* 2015 Daniel Bittman <danielbittman1@gmail.com>: http://dbittman.github.io/ */
+
 #include <stdatomic.h>
 #include <stdbool.h>
-#include <pthread.h>
 #include <stdlib.h>
-#include <assert.h>
 
 #include "mpscq.h"
 
@@ -12,7 +11,7 @@
 struct mpscq *mpscq_create(struct mpscq *n, size_t capacity)
 {
 	if(!n) {
-		n = malloc(sizeof(*n));
+		n = calloc(1, sizeof(*n));
 		n->flags |= MPSCQ_MALLOC;
 	} else {
 		n->flags = 0;
@@ -20,8 +19,9 @@ struct mpscq *mpscq_create(struct mpscq *n, size_t capacity)
 	n->count = ATOMIC_VAR_INIT(0);
 	n->head = ATOMIC_VAR_INIT(0);
 	n->tail = 0;
-	n->buffer = malloc(capacity * sizeof(void *));
+	n->buffer = calloc(capacity, sizeof(void *));
 	n->max = capacity;
+	atomic_thread_fence(memory_order_release);
 	return n;
 }
 
@@ -43,16 +43,13 @@ bool mpscq_enqueue(struct mpscq *q, void *obj)
 
 	/* increment the head, which gives us 'exclusive' access to that element */
 	size_t head = atomic_fetch_add_explicit(&q->head, 1, memory_order_acquire);
-	atomic_exchange_explicit(&q->buffer[head % q->max], obj, memory_order_release);
+	atomic_store_explicit(&q->buffer[head % q->max], obj, memory_order_release);
 	return true;
 }
 
 void *mpscq_dequeue(struct mpscq *q)
 {
-	size_t count = atomic_load_explicit(&q->count, memory_order_acquire);
-	if(count == 0)
-		return NULL; /* nothing in queue */
-	void *ret = atomic_exchange_explicit(&q->buffer[q->tail], NULL, memory_order_acq_rel);
+	void *ret = atomic_exchange_explicit(&q->buffer[q->tail], NULL, memory_order_acquire);
 	if(!ret) {
 		/* a thread is adding to the queue, but hasn't done the atomic_exchange yet
 		 * to actually put the item in. Act as if nothing is in the queue.

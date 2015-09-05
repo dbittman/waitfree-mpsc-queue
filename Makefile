@@ -1,3 +1,5 @@
+# 2015 Daniel Bittman <danielbittman1@gmail.com>: http://dbittman.github.io/
+
 CFLAGS=-Wall -Wextra -Werror -std=c11 -O2
 LDFLAGS=-lpthread -pg
 all: libmpscq.so libmpscq.a mpsc_test

@@ -1,3 +1,4 @@
+/* 2015 Daniel Bittman <danielbittman1@gmail.com>: http://dbittman.github.io/ */
 #ifndef __MPSCQ_H
 #define __MPSCQ_H
 
@@ -19,7 +20,9 @@ struct mpscq {
 
 /* create a new mpscq. If n == NULL, it will allocate
  * a new one and return it. If n != NULL, it will
- * initialize the structure that was passed in. */
+ * initialize the structure that was passed in. 
+ * capacity must be greater than 1, and it is recommended
+ * to be much, much larger than that. */
 struct mpscq *mpscq_create(struct mpscq *n, size_t capacity);
 
 /* enqueue an item into the queue. Returns true on success
