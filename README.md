@@ -7,20 +7,27 @@ This code is tested, but not proven. Use it at your own peril.
 Interface
 ---------
 Creation and destruction of a queue can be done with:
+
     struct mpscq *mpscq_create(struct mpscq *n, size_t capacity);
     void mpscq_destroy(struct mpscq *q);
+
 Passing a NULL pointer as _n_ will allocate a new queue with malloc, initialize it, and return it. Passing a pointer to a struct mpscq as _n_ will initialize that object. Calling the destroy function will free the internal data of the object, and if the object was allocated via malloc, it will be freed as well.
 
 Enqueuing can be done with:
+
     bool mpscq_enqueue(struct mpscq *q, void *obj);
+
 which will enqueue _obj_ in _q_, returning true if it was enqueued and false if it wasn't (queue was full).
 
 Dequeuing can be done with:
+
     void *mpscq_dequeue(struct mpscq *q);
+
 which will return NULL if the queue was empty or an object from the queue if it wasn't. Note that
 a queue may appear to be empty if a thread is in the process if writing the object in the next slot in the buffer, but that's okay because the function can be called again (see the comments in the source for more interesting comments on this).
 
 The queue may also be queried for current number of items and for total capacity:
+
     size_t mpscq_capacity(struct mpscq *q);
     size_t mpscq_count(struct mpscq *q);
 
