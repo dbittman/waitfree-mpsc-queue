@@ -38,9 +38,11 @@ In the dequeue function, we exchange the tail with NULL, and observe the return 
 
 Performance (preliminary)
 -------------------------
-Here's a quick comparison to a locked circular queue I wrote quickly, fueled by beer. With 64 threads, each writing 200 objects to the queue with the speed of 64 fairly slow threads (and, of course, a singular thread reading from it with the speed of a one fairly slow thread ... ).
+Here's a quick comparison to a locked circular queue I wrote quickly, fueled by beer. With 64 threads, each writing 200 objects to the queue with the speed of 64 fairly slow threads (and, of course, a singular thread reading from it with the speed of a one fairly slow thread... ) the lock-free queue wins pretty convincingly:
 
 ![I WILL WRITE 500 OBJECTS, AND I WILL WRITE 500 MORE](https://raw.githubusercontent.com/dbittman/waitfree-mpsc-queue/master/data/64-200.png)
+
+(hard to see: the left-most data points are at x=50, not 0)
 
 Well, that's pretty nice. If your queue is small, then MPSCQ does wonders compared to locking, which is what I would expect.
 
