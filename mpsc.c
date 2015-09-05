@@ -5,139 +5,76 @@
 #include <stdlib.h>
 #include <assert.h>
 
-static __inline__ unsigned long long rdtsc(void)
-{
-    unsigned hi, lo;
-    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-    return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
-}
+#include "mpscq.h"
 
-struct mpsc {
-	_Atomic int count;
-	_Atomic int head;
-	_Atomic int tail;
-	int max;
-	void * _Atomic *buffer; //buffer is a pointer to atomic void *
-};
-
-struct mpsc *mpsc_new(void)
+/* multi-producer, single consumer queue *
+ * Requirements: max must be >= 2 */
+struct mpscq *mpscq_create(struct mpscq *n, size_t capacity)
 {
-	struct mpsc *n = malloc(sizeof(*n));
+	if(!n) {
+		n = malloc(sizeof(*n));
+		n->flags |= MPSCQ_MALLOC;
+	} else {
+		n->flags = 0;
+	}
 	n->count = ATOMIC_VAR_INIT(0);
 	n->head = ATOMIC_VAR_INIT(0);
-	n->tail = ATOMIC_VAR_INIT(0);
-	n->buffer = malloc(4096 * sizeof(void *));
-	n->max = 4096;
+	n->tail = 0;
+	n->buffer = malloc(capacity * sizeof(void *));
+	n->max = capacity;
 	return n;
 }
 
-struct mpsc *queue;
-_Atomic int amount_produced = ATOMIC_VAR_INIT(0);
-_Atomic int amount_consumed = ATOMIC_VAR_INIT(0);
-_Atomic bool done = ATOMIC_VAR_INIT(false);
-
-int mpsc_enqueue(struct mpsc *q, void *obj)
+void mpscq_destroy(struct mpscq *q)
 {
-	int count = atomic_fetch_add(&q->count, 1);
-	if(count >= q->max) {
-		atomic_fetch_sub(&q->count, 1);
-		return -1;
-	}
-
-	bool result;
-	int extras = 0;
-	do {
-		void *expected = NULL;
-		int head = atomic_fetch_add(&q->head, 1);
-		if(head > q->max && 0) {
-			int new_head = head + 1;
-			bool r = atomic_compare_exchange_strong(&q->head, &new_head, 0);
-			if(r)
-				fprintf(stderr, "------- RESET HEAD\n");
-		}
-		result = atomic_compare_exchange_strong(&q->buffer[head % q->max], &expected, obj);
-		if(!result)
-			atomic_fetch_sub(&q->head, 1);
-		++extras;
-	} while(!result);
-	return extras - 1;
+	free(q->buffer);
+	if(q->flags & MPSCQ_MALLOC)
+		free(q);
 }
 
-void *mpsc_dequeue(struct mpsc *q)
+bool mpscq_enqueue(struct mpscq *q, void *obj)
 {
-	int count = atomic_load(&q->count);
+	size_t count = atomic_fetch_add_explicit(&q->count, 1, memory_order_acquire);
+	if(count >= q->max) {
+		/* back off, queue is full */
+		atomic_fetch_sub_explicit(&q->count, 1, memory_order_relaxed);
+		return false;
+	}
+
+	/* increment the head, which gives us 'exclusive' access to that element */
+	size_t head = atomic_fetch_add_explicit(&q->head, 1, memory_order_acquire);
+	atomic_exchange_explicit(&q->buffer[head % q->max], obj, memory_order_release);
+	return true;
+}
+
+void *mpscq_dequeue(struct mpscq *q)
+{
+	size_t count = atomic_load_explicit(&q->count, memory_order_acquire);
 	if(count == 0)
+		return NULL; /* nothing in queue */
+	void *ret = atomic_exchange_explicit(&q->buffer[q->tail], NULL, memory_order_acq_rel);
+	if(!ret) {
+		/* a thread is adding to the queue, but hasn't done the atomic_exchange yet
+		 * to actually put the item in. Act as if nothing is in the queue.
+		 * Worst case, other producers write content to tail + 1..n and finish, but
+		 * the producer that writes to tail doesn't do it in time, and we get here.
+		 * But that's okay, because once it DOES finish, we can get at all the data
+		 * that has been filled in. */
 		return NULL;
-	void *ret = atomic_exchange(&q->buffer[q->tail], NULL);
-	if(!ret)
-		return NULL;
+	}
 	if(++q->tail >= q->max)
 		q->tail = 0;
-	atomic_fetch_sub(&q->count, 1);
+	atomic_fetch_sub_explicit(&q->count, 1, memory_order_relaxed);
 	return ret;
 }
 
-void *producer_main(void *x)
+size_t mpscq_count(struct mpscq *q)
 {
-	int fails = 0, succ=0;
-	int num = 200;
-	for(int i=0;i<num;i++) {
-		int r = mpsc_enqueue(queue, x);
-		if(r >= 0) {
-			fails+=r;
-			succ++;
-			atomic_fetch_add(&amount_produced, 1);
-		} else {
-			i--;
-		}
-	}
-	if(fails > 0)
-		printf("Producer produced %d items, failed %d times (%f rate)\n", succ, fails, (float)fails / num);
-	pthread_exit(0);
+	return atomic_load_explicit(&q->count, memory_order_relaxed);
 }
 
-void *consumer_main(void *x)
+size_t mpscq_capacity(struct mpscq *q)
 {
-	(void)x;
-	while(true) {
-		void *ret = mpsc_dequeue(queue);
-		if(ret) {
-			atomic_fetch_add(&amount_consumed, 1);
-		}
-		if(!ret && done) {
-			if(!mpsc_dequeue(queue))
-				break;
-			else
-				atomic_fetch_add(&amount_consumed, 1);
-		}
-	}
-	assert(!mpsc_dequeue(queue));
-	pthread_exit(0);
-}
-
-int main(int argc, char **argv)
-{
-	(void)argc;
-	(void)argv;
-	int num_producers = 200;
-	pthread_t producers[num_producers];
-	pthread_t consumer;
-
-	queue = mpsc_new();
-
-	pthread_create(&consumer, NULL, consumer_main, NULL);
-	for(long i=0;i<num_producers;i++) {
-		pthread_create(&producers[i], NULL, producer_main, &producers[i]);
-	}
-
-	for(int i=0;i<num_producers;i++) {
-		pthread_join(producers[i], NULL);
-	}
-	done = true;
-	pthread_join(consumer, NULL);
-	
-	fprintf(stderr, "Amount produced: %d, Amount consumed: %d\n",
-			amount_produced, amount_consumed);
-	exit(amount_produced != amount_consumed);
+	return q->max;
 }
 
