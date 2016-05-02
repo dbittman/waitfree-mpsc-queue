@@ -3,8 +3,13 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "mpscq.h"
+
+#define memory_order_release memory_order_seq_cst
+#define memory_order_acquire memory_order_seq_cst
+#define memory_order_relaxed memory_order_seq_cst
 
 /* multi-producer, single consumer queue *
  * Requirements: max must be >= 2 */
@@ -37,13 +42,15 @@ bool mpscq_enqueue(struct mpscq *q, void *obj)
 	size_t count = atomic_fetch_add_explicit(&q->count, 1, memory_order_acquire);
 	if(count >= q->max) {
 		/* back off, queue is full */
-		atomic_fetch_sub_explicit(&q->count, 1, memory_order_relaxed);
+		atomic_fetch_sub_explicit(&q->count, 1, memory_order_release);
 		return false;
 	}
 
 	/* increment the head, which gives us 'exclusive' access to that element */
 	size_t head = atomic_fetch_add_explicit(&q->head, 1, memory_order_acquire);
-	atomic_store_explicit(&q->buffer[head % q->max], obj, memory_order_release);
+	assert(q->buffer[head % q->max] == 0);
+	void *rv = atomic_exchange_explicit(&q->buffer[head % q->max], obj, memory_order_release);
+	assert(rv == NULL);
 	return true;
 }
 
@@ -61,7 +68,8 @@ void *mpscq_dequeue(struct mpscq *q)
 	}
 	if(++q->tail >= q->max)
 		q->tail = 0;
-	atomic_fetch_sub_explicit(&q->count, 1, memory_order_relaxed);
+	size_t r = atomic_fetch_sub_explicit(&q->count, 1, memory_order_release);
+	assert(r > 0);
 	return ret;
 }
 
