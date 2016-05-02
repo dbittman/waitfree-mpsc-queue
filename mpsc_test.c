@@ -20,11 +20,11 @@ struct item {
 	_Atomic int sent, recv;
 };
 
-struct item items[NUM_THREADS][NUM_ITEMS];
+_Atomic struct item items[NUM_THREADS][NUM_ITEMS];
 
 void *producer_main(void *x)
 {
-	int tid = (int)x;
+	long tid = (long)x;
 	struct timespec start, end;
 	for(int i=0;i<NUM_ITEMS;i++) {
 		assert(atomic_fetch_add(&items[tid][i].sent, 1) == 0);
@@ -50,6 +50,7 @@ void *producer_main(void *x)
 void *consumer_main(void *x)
 {
 	(void)x;
+	bool doublechecked = false;
 	while(true) {
 		void *ret = mpscq_dequeue(queue);
 		if(ret) {
@@ -57,12 +58,11 @@ void *consumer_main(void *x)
 			struct item *it = ret;
 			assert(atomic_fetch_add(&it->sent, 1) == 1);
 			assert(atomic_fetch_add(&it->recv, 1) == 0);
-		}
-		if(!ret && done) {
-			if(!mpscq_dequeue(queue))
-				break;
-			else
-				atomic_fetch_add(&amount_consumed, 1);
+			doublechecked = false;
+		} else if(done && doublechecked) {
+			break;
+		} else if(done) {
+			doublechecked = true;
 		}
 	}
 	assert(!mpscq_dequeue(queue));
@@ -111,8 +111,8 @@ int main(int argc, char **argv)
 	for(int i=0;i<num_producers;i++) {
 		for(int j=0;j<NUM_ITEMS;j++) {
 			if(items[i][j].sent != 2) {
-				printf(":(%d %d): %d %d\n", i, j, items[i][j].sent,
-						items[i][j].recv);
+				printf(":(%d %d): %d %d, %d %d\n", i, j, items[i][j].sent,
+						items[i][j].recv, amount_produced, amount_consumed);
 			}
 			assert(items[i][j].sent == 2);
 			assert(items[i][j].recv == 1);
