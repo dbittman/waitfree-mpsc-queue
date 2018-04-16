@@ -13,14 +13,14 @@ _Atomic int amount_consumed = ATOMIC_VAR_INIT(0);
 _Atomic bool done = ATOMIC_VAR_INIT(false);
 _Atomic int retries = ATOMIC_VAR_INIT(0);
 _Atomic long long total = ATOMIC_VAR_INIT(0);
-#define NUM_ITEMS 100
-#define NUM_THREADS 128
+#define NUM_ITEMS 10000
+#define NUM_THREADS 32
 
 struct item {
 	_Atomic int sent, recv;
 };
 
-_Atomic struct item items[NUM_THREADS][NUM_ITEMS];
+struct item items[NUM_THREADS][NUM_ITEMS];
 
 void *producer_main(void *x)
 {
