@@ -1,11 +1,22 @@
 # 2015 Daniel Bittman <danielbittman1@gmail.com>: http://dbittman.github.io/
 
-CFLAGS=-Wall -Wextra -Werror -std=gnu11 -O2 -pg
+CFLAGS=-Wall -Wextra -Werror -std=gnu11 -O3 -pg
 LDFLAGS=-lpthread -pg
 CC=gcc
+
+ifeq ($(strip $(DEBUG)),tsan)
+	CC=clang
+	CFLAGS+=-fsanitize=thread
+	LDFLAGS+=-fsanitize=thread
+else ifeq ($(strip $(DEBUG)),asan)
+	CC=clang
+	CFLAGS+=-fsanitize=address
+	LDFLAGS+=-fsanitize=address
+endif
+
 all: libmpscq.so libmpscq.a mpsc_test
 
-mpsc_test: mpscq.h mpsc.o mpsc_test.o
+mpsc_test: mpsc.o mpsc_test.o
 
 mpsc_test.o: mpsc_test.c
 

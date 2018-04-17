@@ -7,10 +7,6 @@
 
 #include "mpscq.h"
 
-#define memory_order_release memory_order_seq_cst
-#define memory_order_acquire memory_order_seq_cst
-#define memory_order_relaxed memory_order_seq_cst
-
 /* multi-producer, single consumer queue *
  * Requirements: max must be >= 2 */
 struct mpscq *mpscq_create(struct mpscq *n, size_t capacity)

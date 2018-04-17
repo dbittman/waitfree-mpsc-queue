@@ -1,0 +1,5 @@
+*.a
+*.o
+*.so
+gmon.out
+mpsc_test
