@@ -1,7 +1,8 @@
 # 2015 Daniel Bittman <danielbittman1@gmail.com>: http://dbittman.github.io/
 
-CFLAGS=-Wall -Wextra -Werror -std=gnu11 -O3 -pg
-LDFLAGS=-lpthread -pg
+CFLAGS=-Wall -Wextra -Werror -std=gnu11 -O3
+LDFLAGS=
+LIBRARIES=-lpthread
 CC=gcc
 
 ifeq ($(strip $(DEBUG)),tsan)
@@ -17,6 +18,7 @@ endif
 all: libmpscq.so libmpscq.a mpsc_test
 
 mpsc_test: mpsc.o mpsc_test.o
+	$(CC) -o $@ $(LDFLAGS) mpsc.o mpsc_test.o $(LIBRARIES)
 
 mpsc_test.o: mpsc_test.c
 
