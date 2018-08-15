@@ -2,7 +2,7 @@
 
 CFLAGS=-Wall -Wextra -Werror -std=gnu11 -O3
 LDFLAGS=
-LIBRARIES=-lpthread
+LDLIBS=-lpthread
 CC=gcc
 
 ifeq ($(strip $(DEBUG)),tsan)
@@ -18,7 +18,6 @@ endif
 all: libmpscq.so libmpscq.a mpsc_test
 
 mpsc_test: mpsc.o mpsc_test.o
-	$(CC) -o $@ $(LDFLAGS) mpsc.o mpsc_test.o $(LIBRARIES)
 
 mpsc_test.o: mpsc_test.c
 
