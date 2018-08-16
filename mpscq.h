@@ -3,12 +3,15 @@
 #define __MPSCQ_H
 
 #include <stdint.h>
+#ifndef __cplusplus
 #include <stdatomic.h>
+#endif
 #include <stdbool.h>
 #include <sys/types.h>
 
 #define MPSCQ_MALLOC 1
 
+#ifndef __cplusplus
 struct mpscq {
 	_Atomic size_t count;
 	_Atomic size_t head;
@@ -17,7 +20,13 @@ struct mpscq {
 	void * _Atomic *buffer;
 	int flags;
 };
+#else
+struct mpscq;
+#endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 /* create a new mpscq. If n == NULL, it will allocate
  * a new one and return it. If n != NULL, it will
  * initialize the structure that was passed in. 
@@ -46,6 +55,9 @@ size_t mpscq_capacity(struct mpscq *q);
  * frees q if it was created by passing NULL to mpscq_create */
 void mpscq_destroy(struct mpscq *q);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 
