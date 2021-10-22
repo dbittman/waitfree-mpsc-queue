@@ -31,7 +31,7 @@ extern "C" {
  * a new one and return it. If n != NULL, it will
  * initialize the structure that was passed in. 
  * capacity must be greater than 1, and it is recommended
- * to be much, much larger than that. */
+ * to be much, much larger than that. It must also be a power of 2. */
 struct mpscq *mpscq_create(struct mpscq *n, size_t capacity);
 
 /* enqueue an item into the queue. Returns true on success
